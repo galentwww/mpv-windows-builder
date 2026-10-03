@@ -115,14 +115,21 @@ jobs:
       run: |
         Get-Content mpv-builder/mpv-windows/build/meson-logs/meson-log.txt -Tail 300 -ErrorAction SilentlyContinue
 
+    - name: collect vcpkg logs
+      if: ${{ failure() }}
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory buildtrees-logs -Force | Out-Null
+        Get-ChildItem C:\vcpkg\buildtrees -Recurse -Filter *.log -ErrorAction SilentlyContinue |
+          ForEach-Object { $d = Join-Path buildtrees-logs $_.Directory.Name; New-Item -ItemType Directory $d -Force | Out-Null; Copy-Item $_.FullName $d }
+        Copy-Item mpv-deps-builder\vcpkg_installed\vcpkg\issue_body.md buildtrees-logs\ -ErrorAction SilentlyContinue
+
     - name: upload vcpkg logs
       if: ${{ failure() }}
       uses: actions/upload-artifact@v4
       with:
         name: vcpkg-logs
-        path: |
-          C:\vcpkg\buildtrees\**\*.log
-          mpv-deps-builder\vcpkg_installed\vcpkg\issue_body.md
+        path: buildtrees-logs
         if-no-files-found: ignore
 
     - name: upload libmpv
