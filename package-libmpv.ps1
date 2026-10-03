@@ -54,7 +54,8 @@ function Resolve-License([string]$port, [string]$expr) {
 $git = { param($dir) (git -C $dir rev-parse HEAD).Trim() }
 $mpvCommit = & $git $mpvSrc
 $placeboCommit = & $git (Join-Path $mpvSrc 'subprojects/libplacebo')
-$mpvVersion = (Select-String -Path (Join-Path $mpvSrc 'build/version.h') -Pattern '#define VERSION "(.+)"').Matches.Groups[1].Value
+$versionH = Get-ChildItem (Join-Path $mpvSrc 'build') -Filter version.h -Recurse | Select-Object -First 1
+$mpvVersion = (Select-String -Path $versionH.FullName -Pattern '#define VERSION "(.+)"').Matches.Groups[1].Value
 if (-not $mpvVersion) { throw 'cannot read mpv version from build/version.h' }
 
 $rows = [System.Collections.Generic.List[object]]::new()
