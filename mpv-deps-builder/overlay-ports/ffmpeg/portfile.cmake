@@ -1088,6 +1088,18 @@ else()
     message(FATAL_ERROR "Failed to identify license (${LICENSE_STRING})")
 endif()
 
+# xfdm: libmpv must be LGPL-2.1+. Fail the port instead of producing a GPL / version3 / nonfree ffmpeg,
+# and record the configure line where it survives vcpkg binary caching (buildtrees do not).
+if(NOT LICENSE_STRING STREQUAL "License: LGPL version 2.1 or later")
+    message(FATAL_ERROR "xfdm requires LGPL 2.1+ ffmpeg, got: ${LICENSE_STRING}")
+endif()
+file(STRINGS "${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-rel/config.h" FFMPEG_CONFIGURATION_LINE REGEX "^#define FFMPEG_CONFIGURATION " LIMIT_COUNT 1)
+string(REGEX REPLACE "^#define FFMPEG_CONFIGURATION \"(.*)\"$" "\\1" FFMPEG_CONFIGURATION "${FFMPEG_CONFIGURATION_LINE}")
+if(FFMPEG_CONFIGURATION STREQUAL "" OR FFMPEG_CONFIGURATION MATCHES "--enable-(gpl|nonfree|version3)")
+    message(FATAL_ERROR "xfdm: unexpected ffmpeg configuration: ${FFMPEG_CONFIGURATION}")
+endif()
+file(WRITE "${CURRENT_PACKAGES_DIR}/share/${PORT}/xfdm-build-info.txt" "version=${FFMPEG_VERSION}\n${LICENSE_STRING}\nconfiguration=${FFMPEG_CONFIGURATION}\n")
+
 configure_file("${CMAKE_CURRENT_LIST_DIR}/FindFFMPEG.cmake.in" "${CURRENT_PACKAGES_DIR}/share/${PORT}/FindFFMPEG.cmake" @ONLY)
 configure_file("${CMAKE_CURRENT_LIST_DIR}/vcpkg-cmake-wrapper.cmake" "${CURRENT_PACKAGES_DIR}/share/${PORT}/vcpkg-cmake-wrapper.cmake" @ONLY)
 

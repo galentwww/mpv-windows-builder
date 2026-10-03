@@ -2,7 +2,6 @@
   "dependencies": [
     "bzip2",
     "expat",
-    "openssl",
     {
       "name": "ffmpeg",
       "features": [
@@ -26,13 +25,11 @@
         "theora",
         "vorbis",
         "zlib",
-        "openssl",
         "xml2",
         "dav1d",
         "webp"
       ]
     },
-    "openssl",
     {
       "name": "harfbuzz",
       "features": ["directwrite"]
@@ -47,7 +44,6 @@
     "freetype",
     "fribidi",
     "brotli",
-    "gperf",
     "libpng",
     "libunibreak",
     "shaderc",
@@ -60,25 +56,6 @@
     "luajit",
     "mujs",
     "libjxl",
-    "libarchive",
-    "libbluray",
-      {
-      "name": "curl",
-      "features": [
-        "ssl",
-        "brotli",
-        "http2",
-        "http3",
-        "httpsrr",
-        "non-http",
-        "openssl",
-        "idn",
-        "websockets"
-      ]
-    },
-    "libdvdread",
-    "libdvdnav",
-    "libjpeg-turbo",
-    "libcdio-paranoia"
+    "libjpeg-turbo"
   ]
 }

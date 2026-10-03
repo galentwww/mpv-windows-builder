@@ -1,22 +1,30 @@
+# LGPL libmpv only: -Dgpl=false, no cplayer, every GPL-gated feature (cdda, dvbin, dvda, dvdnav,
+# direct3d, ...) explicitly disabled so meson fails loudly instead of silently re-enabling them.
 meson setup build `
     --wrap-mode=nodownload  `
     --force-fallback-for=libplacebo  `
     --native-file=../windows-clangcl.ini  `
+    -Dgpl=false `
     -Dlibmpv=true `
-    -Dcplayer=true  `
-    -Dwin32-smtc=enabled `
-    -Dwin32-subsystem=console `
-    -Dgpl=true `
+    -Dcplayer=false `
+    -Dwin32-smtc=disabled `
     -Dd3d11=enabled `
+    -Dd3d-hwaccel=enabled `
+    -Ddirect3d=disabled `
     -Diconv=enabled `
     -Duchardet=enabled `
-    -Dlua=enabled  `
     -Dlua=luajit `
     -Djavascript=enabled `
-    -Dcplugins=enabled `
+    -Dcplugins=disabled `
     -Drubberband=disabled `
-    -Dlibarchive=enabled `
-    -Dlibbluray=enabled `
+    -Dvapoursynth=disabled `
+    -Dlibarchive=disabled `
+    -Dlibbluray=disabled `
+    -Dlibcurl=disabled `
+    -Dcdda=disabled `
+    -Ddvbin=disabled `
+    -Ddvda=disabled `
+    -Ddvdnav=disabled `
     -Ddrm=disabled `
     -Dzimg=disabled `
     -Djpeg=enabled  `
@@ -28,11 +36,7 @@ meson setup build `
     -Dx11=disabled  `
     -Dwayland=disabled `
     -Dtests=false `
-    -Dlibcurl=enabled `
-    -Ddvda=enabled `
-    -Ddvdnav=enabled `
-    -Ddvdnav=enabled `
-    -Dcdda=enabled `
+    -Dmanpage-build=disabled `
     -Dlibplacebo:demos=false `
     -Dlibplacebo:lcms=enabled `
     -Dlibplacebo:shaderc=enabled `
@@ -44,3 +48,4 @@ meson setup build `
     -Dlibplacebo:unwind=disabled `
     -Dbuildtype=release  `
     --reconfigure
+if ($LASTEXITCODE -ne 0) { throw "meson setup failed ($LASTEXITCODE)" }

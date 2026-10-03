@@ -1,9 +1,0 @@
-{
-  "name": "libcdio",
-  "version-semver": "2.4.0",
-  "description": "A library for CD-ROM and CD image access. Includes libiso9660, libudf and libcdio.",
-  "homepage": "https://github.com/libcdio/libcdio",
-  "license": "GPL-3.0-or-later",
-  "supports": "!uwp",
-  "dependencies": []
-}
