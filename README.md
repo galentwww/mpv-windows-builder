@@ -2,6 +2,17 @@
 
 # mpv-windows-builder
 
+## xfdm LGPL fork
+
+This branch builds an **LGPL-2.1-or-later libmpv** (`mpv-2.dll` only, no `mpv.exe`) for dynamic linking from a closed-source app:
+
+- mpv `-Dgpl=false -Dcplayer=false`; cdda / dvdnav / dvda / dvbin / libbluray / libarchive / libcurl / win32-smtc disabled.
+- vcpkg: libcdio, libcdio-paranoia, libdvdread, libdvdnav, libbluray, curl, libarchive, openssl removed. ffmpeg uses schannel for TLS and must report `License: LGPL version 2.1 or later` (enforced in the overlay port).
+- mpv and libplacebo are pinned in `mpv-builder/clone-mpv.ps1`.
+- `package-libmpv.ps1` produces `libmpv-lgpl-<tag>-<arch>.zip` (`bin/`, `include/`, `lib/`, `THIRD_PARTY_NOTICES.md`, `licenses/`, `build-info.json`) and fails if any statically linked component resolves to a GPL license. Ports without license metadata must be reviewed and listed in `mpv-deps-builder/license-overrides.json`.
+
+The notes below describe the upstream GPL configuration.
+
 ## Overview
 - Deps by vcpkg with clang-cl
 - Only d3d11

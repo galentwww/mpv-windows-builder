@@ -1,4 +1,4 @@
-name: build mpv
+name: build libmpv (LGPL)
 on:
   workflow_dispatch:
     inputs:
@@ -7,22 +7,50 @@ on:
         required: false
         default: false
         type: boolean
-        
+      tag:
+        description: 'release tag (YYYYMMDD); empty = today (UTC)'
+        required: false
+        default: ''
+        type: string
+      publish:
+        description: 'create a GitHub Release from the packaged zip'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: read
+      packages: write
 
-    env: 
-      USERNAME: ikas-mc
-      FEED_URL: https://nuget.pkg.github.com/ikas-mc/index.json
-      VCPKG_BINARY_SOURCES: "clear;nuget,https://nuget.pkg.github.com/ikas-mc/index.json,readwrite"
-      ENABLE_LTO: ${{ github.event.inputs.enableLto }}
+    env:
+      FEED_URL: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
+      VCPKG_BINARY_SOURCES: "clear;nuget,https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json,readwrite"
+      ENABLE_LTO: ${{ inputs.enableLto }}
+      ARCH: x64
+
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
 
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: msvc
       uses: microsoft/setup-msbuild@v2
+
+    - name: tag
+      id: tag
+      shell: pwsh
+      run: |
+        $tag = '${{ inputs.tag }}'
+        if (-not $tag) { $tag = (Get-Date).ToUniversalTime().ToString('yyyyMMdd') }
+        if ($tag -notmatch '^\d{8}$') { throw "tag must be YYYYMMDD, got $tag" }
+        "tag=$tag" >> $env:GITHUB_OUTPUT
 
     - name: Add NuGet sources
       shell: pwsh
@@ -32,10 +60,10 @@ jobs:
           -Source "${{ env.FEED_URL }}" `
           -StorePasswordInClearText `
           -Name GitHubPackages `
-          -UserName "${{ env.USERNAME }}" `
-          -Password "${{ secrets.GH_PACKAGES_TOKEN }}"
+          -UserName "${{ github.repository_owner }}" `
+          -Password "${{ secrets.GITHUB_TOKEN }}"
         .$(vcpkg.exe fetch nuget) `
-          setapikey "${{ secrets.GH_PACKAGES_TOKEN }}" `
+          setapikey "${{ secrets.GITHUB_TOKEN }}" `
           -Source "${{ env.FEED_URL }}"
 
     - name: tools
@@ -57,6 +85,7 @@ jobs:
         } else {
           .\build-deps.ps1
         }
+        if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
     - name: build mpv
       run: |
@@ -70,28 +99,68 @@ jobs:
           .\build-mpv.ps1
         }
 
-    - name: Print build log
-      if: ${{ failure() && steps.build.outcome == 'failure' }}
+    - name: package
+      shell: pwsh
       run: |
-        cat ./app/build/meson-logs/meson-log.txt
+        $triplet = if ($env:ENABLE_LTO -eq 'true') { "$env:ARCH-llvm-windows-static-mt-lto" } else { "$env:ARCH-llvm-windows-static-mt" }
+        .\package-libmpv.ps1 -Tag '${{ steps.tag.outputs.tag }}' -Arch $env:ARCH -Triplet $triplet
+        Copy-Item meson-setup.log dist/
+        Get-Content dist/*.sha256
+        Get-Content dist/stage-$env:ARCH/build-info.json
 
-    - name: upload mpv.exe
+    - name: Print meson log
+      if: ${{ failure() }}
+      run: |
+        Get-Content mpv-builder/mpv-windows/build/meson-logs/meson-log.txt -Tail 300 -ErrorAction SilentlyContinue
+
+    - name: upload vcpkg logs
+      if: ${{ failure() }}
       uses: actions/upload-artifact@v4
       with:
-        name: mpv.exe
+        name: vcpkg-logs
         path: |
-          mpv-builder\mpv-windows\build\mpv-windows-x64\bin\mpv.exe
-          mpv-builder\mpv-windows\build\mpv-windows-x64\bin\mpv.pdb
-          mpv-builder\mpv-windows\build\mpv-windows-x64\share\doc
-          mpv-builder\mpv-windows\build\mpv-windows-x64\share\metainfo
+          C:\vcpkg\buildtrees\**\*.log
+          mpv-deps-builder\vcpkg_installed\vcpkg\issue_body.md
+        if-no-files-found: ignore
 
-    - name: upload mpv-2.dll
+    - name: upload libmpv
       uses: actions/upload-artifact@v4
       with:
-        name: mpv-2.dll
+        name: libmpv-lgpl-${{ steps.tag.outputs.tag }}-x64
         path: |
-          mpv-builder\mpv-windows\build\mpv-windows-x64\bin\mpv-2.dll
-          mpv-builder\mpv-windows\build\mpv-windows-x64\bin\mpv-2.pdb
-          mpv-builder\mpv-windows\build\mpv-windows-x64\include
-          mpv-builder\mpv-windows\build\mpv-windows-x64\lib
-          mpv-builder\mpv-windows\build\mpv-windows-x64\share
+          dist/*.zip
+          dist/*.sha256
+          dist/meson-setup.log
+
+  release:
+    needs: build
+    if: ${{ inputs.publish }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        path: dist
+        merge-multiple: true
+
+    - name: create release
+      env:
+        GH_TOKEN: ${{ github.token }}
+        TAG: ${{ needs.build.outputs.tag }}
+      run: |
+        {
+          echo "LGPL libmpv build (-Dgpl=false), ffmpeg without --enable-gpl / --enable-nonfree / --enable-version3."
+          echo
+          echo '```'
+          cat dist/*.sha256
+          echo '```'
+          echo
+          echo '<details><summary>meson setup</summary>'
+          echo
+          echo '```'
+          cat dist/meson-setup.log
+          echo '```'
+          echo '</details>'
+        } > notes.md
+        gh release create "$TAG" dist/*.zip dist/*.sha256 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "libmpv LGPL $TAG" --notes-file notes.md
