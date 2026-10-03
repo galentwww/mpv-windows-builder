@@ -65,7 +65,8 @@ $rows.Add([pscustomobject]@{ Name = 'libplacebo'; Version = $placeboCommit.Subst
 $errors = [System.Collections.Generic.List[string]]::new()
 foreach ($spdxFile in Get-ChildItem (Join-Path $vcpkgDir 'share') -Filter vcpkg.spdx.json -Recurse -Depth 1) {
     $port = $spdxFile.Directory.Name
-    $pkg = (Get-Content $spdxFile -Raw | ConvertFrom-Json).packages | Where-Object SPDXID -eq 'SPDXRef-port' | Select-Object -First 1
+    $pkg = (Get-Content $spdxFile -Raw | ConvertFrom-Json).packages |
+        Where-Object SPDXID -eq 'SPDXRef-port' | Sort-Object { $_.name -ne $port } | Select-Object -First 1
     $declared = if ($pkg.licenseConcluded -and $pkg.licenseConcluded -ne 'NOASSERTION') { $pkg.licenseConcluded } else { $pkg.licenseDeclared }
     $license = Resolve-License $port $declared
     if (-not $license) { $errors.Add("$port`: no license metadata (add to license-overrides.json after review)"); continue }

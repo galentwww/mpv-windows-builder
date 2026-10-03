@@ -1,3 +1,22 @@
 {
-  "ffmpeg": "LGPL-2.1-or-later"
+  "_comment": {
+    "ffmpeg": "vcpkg port declares null; configure reports LGPL-2.1+, enforced by the overlay port",
+    "ffnvcodec": "ffnvcodec.h headers, MIT (github.com/FFmpeg/nv-codec-headers LICENSE)",
+    "libiconv": "GNU libiconv library is LGPL-2.1+ (tools are GPL but not built/shipped)",
+    "lcms": "LittleCMS is MIT; upstream spdx may report the fastfloat dep license",
+    "snappy": "BSD-3-Clause (github.com/google/snappy COPYING)",
+    "soxr": "LGPL-2.1-or-later (soxr.sourceforge.net)",
+    "spirv-cross": "Apache-2.0 (KhronosGroup/SPIRV-Cross)",
+    "spirv-headers": "Apache-2.0 (KhronosGroup/SPIRV-Headers)",
+    "uchardet": "triple-licensed MPL-1.1 OR GPL-2.0-or-later OR LGPL-2.1-or-later; elect MPL-1.1"
+  },
+  "ffmpeg": "LGPL-2.1-or-later",
+  "ffnvcodec": "MIT",
+  "libiconv": "LGPL-2.1-or-later",
+  "lcms": "MIT",
+  "snappy": "BSD-3-Clause",
+  "soxr": "LGPL-2.1-or-later",
+  "spirv-cross": "Apache-2.0",
+  "spirv-headers": "Apache-2.0",
+  "uchardet": "MPL-1.1"
 }
