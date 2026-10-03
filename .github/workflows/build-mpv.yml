@@ -1,5 +1,7 @@
 name: build libmpv (LGPL)
 on:
+  push:
+    branches: [xfdm-lgpl]
   workflow_dispatch:
     inputs:
       enableLto:
