@@ -30,4 +30,10 @@ if(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm64")
     if(PORT MATCHES "^(opus)$")
         list(APPEND VCPKG_CMAKE_CONFIGURE_OPTIONS "-DOPUS_DISABLE_INTRINSICS=ON")
     endif()
+    # mpg123 only falls back to its generic C decoder for MSVC when the compiler id is not Clang; under clang-cl
+    # it picks the arm64 path whose CPU probe (getcpuflags_arm.c) needs POSIX sigaction/sigsetjmp. Pre-seeding
+    # the cached arch probe makes it use MACHINE=generic, as plain MSVC builds do. MP3 decoding only.
+    if(PORT MATCHES "^(mpg123)$")
+        list(APPEND VCPKG_CMAKE_CONFIGURE_OPTIONS "-DHAVE_ARCH_IS_ARM64=OFF")
+    endif()
 endif()
