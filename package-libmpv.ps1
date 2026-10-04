@@ -14,7 +14,7 @@
 [CmdletBinding(PositionalBinding = $false)]
 param(
     [Parameter(Mandatory)][string]$Tag,
-    [ValidateSet('x64')][string]$Arch = 'x64',
+    [ValidateSet('x64', 'arm64')][string]$Arch = 'x64',
     [string]$Triplet = "$Arch-llvm-windows-static-mt",
     [string]$OutDir = (Join-Path $PSScriptRoot 'dist')
 )
@@ -23,7 +23,7 @@ $ErrorActionPreference = 'Stop'
 $gplPattern = '(?<!L)GPL'
 
 $mpvSrc = Join-Path $PSScriptRoot 'mpv-builder/mpv-windows'
-$installDir = Join-Path $mpvSrc 'build/mpv-windows-x64'
+$installDir = Join-Path $mpvSrc "build/mpv-windows-$Arch"
 $vcpkgDir = Join-Path $PSScriptRoot "mpv-deps-builder/vcpkg_installed/$Triplet"
 $overrides = Get-Content (Join-Path $PSScriptRoot 'mpv-deps-builder/license-overrides.json') -Raw | ConvertFrom-Json -AsHashtable
 
@@ -81,6 +81,13 @@ $stage = Join-Path $OutDir "stage-$Arch"
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 New-Item -ItemType Directory -Path "$stage/bin", "$stage/lib", "$stage/licenses" | Out-Null
 Copy-Item (Join-Path $installDir 'bin/mpv-2.dll') "$stage/bin/"
+
+# The DLL's PE machine type must match -Arch (guards against an emulated x64 toolchain on an ARM64 host).
+$pe = [IO.File]::ReadAllBytes("$stage/bin/mpv-2.dll")
+$peOffset = [BitConverter]::ToInt32($pe, 0x3C)
+$machine = [BitConverter]::ToUInt16($pe, $peOffset + 4)
+$expectedMachine = @{ x64 = 0x8664; arm64 = 0xAA64 }[$Arch]
+if ($machine -ne $expectedMachine) { throw ('mpv-2.dll machine 0x{0:X4} does not match {1} (0x{2:X4})' -f $machine, $Arch, $expectedMachine) }
 Copy-Item (Join-Path $installDir 'include') $stage -Recurse
 Copy-Item (Join-Path $installDir 'lib/mpv.lib') "$stage/lib/"
 

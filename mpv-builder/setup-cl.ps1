@@ -1,9 +1,10 @@
 # LGPL libmpv only: -Dgpl=false, no cplayer, every GPL-gated feature (cdda, dvbin, dvda, dvdnav,
 # direct3d, ...) explicitly disabled so meson fails loudly instead of silently re-enabling them.
+$nativeFile = if ($env:ARCH -eq 'arm64') { '../windows-clangcl-arm64.ini' } else { '../windows-clangcl.ini' }
 meson setup build `
     --wrap-mode=nodownload  `
     --force-fallback-for=libplacebo  `
-    --native-file=../windows-clangcl.ini  `
+    --native-file=$nativeFile  `
     -Dgpl=false `
     -Dlibmpv=true `
     -Dcplayer=false `

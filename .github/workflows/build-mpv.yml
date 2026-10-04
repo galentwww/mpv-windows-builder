@@ -1,11 +1,11 @@
 name: build libmpv (LGPL)
 on:
   push:
-    branches: [xfdm-lgpl]
+    branches: [xfdm-lgpl, xfdm-lgpl-arm64]
   workflow_dispatch:
     inputs:
       enableLto:
-        description: 'enable LTO'
+        description: 'enable LTO (x64 only)'
         required: false
         default: false
         type: boolean
@@ -14,8 +14,14 @@ on:
         required: false
         default: ''
         type: string
+      arches:
+        description: 'architectures to build'
+        required: false
+        default: all
+        type: choice
+        options: [all, x64, arm64]
       publish:
-        description: 'create a GitHub Release from the packaged zip'
+        description: 'create a GitHub Release from the packaged zips'
         required: false
         default: false
         type: boolean
@@ -24,8 +30,36 @@ permissions:
   contents: read
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.prep.outputs.tag }}
+      matrix: ${{ steps.prep.outputs.matrix }}
+    steps:
+    - id: prep
+      shell: pwsh
+      run: |
+        $tag = '${{ inputs.tag }}'
+        if (-not $tag) { $tag = (Get-Date).ToUniversalTime().ToString('yyyyMMdd') }
+        if ($tag -notmatch '^\d{8}$') { throw "tag must be YYYYMMDD, got $tag" }
+        $arches = '${{ inputs.arches }}'
+        if (-not $arches) { $arches = if ('${{ github.ref_name }}' -eq 'xfdm-lgpl-arm64') { 'arm64' } else { 'all' } }
+        # x64 builds on the regular x64 image; arm64 builds natively on the ARM64 image (no cross compiling).
+        $all = @(
+          @{ arch = 'x64'; runner = 'windows-latest' },
+          @{ arch = 'arm64'; runner = 'windows-11-arm' }
+        )
+        $include = @($all | Where-Object { $arches -eq 'all' -or $_.arch -eq $arches })
+        if ('${{ inputs.enableLto }}' -eq 'true' -and ($include | Where-Object arch -ne 'x64')) { throw 'LTO is only wired up for x64' }
+        "tag=$tag" >> $env:GITHUB_OUTPUT
+        "matrix=$(@{ include = $include } | ConvertTo-Json -Compress -Depth 4)" >> $env:GITHUB_OUTPUT
+
   build:
-    runs-on: windows-latest
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
@@ -34,10 +68,8 @@ jobs:
       FEED_URL: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
       VCPKG_BINARY_SOURCES: "clear;nuget,https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json,readwrite"
       ENABLE_LTO: ${{ inputs.enableLto }}
-      ARCH: x64
-
-    outputs:
-      tag: ${{ steps.tag.outputs.tag }}
+      ARCH: ${{ matrix.arch }}
+      TAG: ${{ needs.prepare.outputs.tag }}
 
     steps:
     - uses: actions/checkout@v4
@@ -45,14 +77,28 @@ jobs:
     - name: msvc
       uses: microsoft/setup-msbuild@v2
 
-    - name: tag
-      id: tag
+    - name: locate toolchain
       shell: pwsh
       run: |
-        $tag = '${{ inputs.tag }}'
-        if (-not $tag) { $tag = (Get-Date).ToUniversalTime().ToString('yyyyMMdd') }
-        if ($tag -notmatch '^\d{8}$') { throw "tag must be YYYYMMDD, got $tag" }
-        "tag=$tag" >> $env:GITHUB_OUTPUT
+        $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+        $vsRoot = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.ARM64, Microsoft.VisualStudio.Component.VC.Llvm.Clang -property installationPath
+        if (-not $vsRoot) { $vsRoot = & $vswhere -latest -products * -property installationPath }
+        if (-not $vsRoot) { throw 'Visual Studio not found' }
+        "VS_ROOT=$vsRoot" >> $env:GITHUB_ENV
+        if ($env:VCPKG_INSTALLATION_ROOT -and (Test-Path "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe")) {
+          $vcpkgRoot = $env:VCPKG_INSTALLATION_ROOT
+        } else {
+          # The ARM64 image does not ship vcpkg; the port versions come from the baseline in vcpkg-configuration.json either way.
+          $vcpkgRoot = 'C:\vcpkg'
+          git clone -q https://github.com/microsoft/vcpkg.git $vcpkgRoot
+          & "$vcpkgRoot\bootstrap-vcpkg.bat" -disableMetrics
+          if ($LASTEXITCODE) { throw 'vcpkg bootstrap failed' }
+        }
+        "VCPKG_ROOT=$vcpkgRoot" >> $env:GITHUB_ENV
+        $vcpkgRoot >> $env:GITHUB_PATH
+        Write-Host "host: $env:PROCESSOR_ARCHITECTURE  arch: $env:ARCH  VS: $vsRoot  vcpkg: $vcpkgRoot"
+        Get-ChildItem "$vsRoot\VC\Tools\Llvm" -Directory -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "VS LLVM: $($_.FullName)" }
+        python -c "import platform; print('python', platform.python_version(), platform.machine())"
 
     - name: Add NuGet sources
       shell: pwsh
@@ -80,8 +126,6 @@ jobs:
         $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -ne 'C:\Program Files\LLVM\bin' -and `
                                                            $_ -ne 'C:\Program Files\CMake\bin' -and `
                                                            $_ -ne 'C:\Strawberry\c\bin' }) -join ';'
-        $env:VS_ROOT="C:\Program Files\Microsoft Visual Studio\18\Enterprise"
-        $env:VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT
         if ($env:ENABLE_LTO -eq 'true') {
           .\build-deps-lto.ps1
         } else {
@@ -94,7 +138,6 @@ jobs:
         $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -ne 'C:\Program Files\LLVM\bin' -and `
                                                            $_ -ne 'C:\Program Files\CMake\bin' -and `
                                                            $_ -ne 'C:\Strawberry\c\bin' }) -join ';'
-        $env:VS_ROOT="C:\Program Files\Microsoft Visual Studio\18\Enterprise"
         if ($env:ENABLE_LTO -eq 'true') {
           .\build-mpv-lto.ps1
         } else {
@@ -105,10 +148,11 @@ jobs:
       shell: pwsh
       run: |
         $triplet = if ($env:ENABLE_LTO -eq 'true') { "$env:ARCH-llvm-windows-static-mt-lto" } else { "$env:ARCH-llvm-windows-static-mt" }
-        .\package-libmpv.ps1 -Tag '${{ steps.tag.outputs.tag }}' -Arch $env:ARCH -Triplet $triplet
-        Copy-Item meson-setup.log dist/
+        .\package-libmpv.ps1 -Tag $env:TAG -Arch $env:ARCH -Triplet $triplet
+        Copy-Item meson-setup.log "dist/meson-setup-$env:ARCH.log"
+        Copy-Item "dist/stage-$env:ARCH/build-info.json" "dist/build-info-$env:ARCH.json"
         Get-Content dist/*.sha256
-        Get-Content dist/stage-$env:ARCH/build-info.json
+        Get-Content "dist/build-info-$env:ARCH.json"
 
     - name: Print meson log
       if: ${{ failure() }}
@@ -120,7 +164,7 @@ jobs:
       shell: pwsh
       run: |
         New-Item -ItemType Directory buildtrees-logs -Force | Out-Null
-        Get-ChildItem C:\vcpkg\buildtrees -Recurse -Filter *.log -ErrorAction SilentlyContinue |
+        Get-ChildItem "$env:VCPKG_ROOT\buildtrees" -Recurse -Filter *.log -ErrorAction SilentlyContinue |
           ForEach-Object { $d = Join-Path buildtrees-logs $_.Directory.Name; New-Item -ItemType Directory $d -Force | Out-Null; Copy-Item $_.FullName $d }
         Copy-Item mpv-deps-builder\vcpkg_installed\vcpkg\issue_body.md buildtrees-logs\ -ErrorAction SilentlyContinue
 
@@ -128,21 +172,22 @@ jobs:
       if: ${{ failure() }}
       uses: actions/upload-artifact@v4
       with:
-        name: vcpkg-logs
+        name: vcpkg-logs-${{ matrix.arch }}
         path: buildtrees-logs
         if-no-files-found: ignore
 
     - name: upload libmpv
       uses: actions/upload-artifact@v4
       with:
-        name: libmpv-lgpl-${{ steps.tag.outputs.tag }}-x64
+        name: libmpv-lgpl-${{ needs.prepare.outputs.tag }}-${{ matrix.arch }}
         path: |
           dist/*.zip
           dist/*.sha256
-          dist/meson-setup.log
+          dist/meson-setup-*.log
+          dist/build-info-*.json
 
   release:
-    needs: build
+    needs: [prepare, build]
     if: ${{ inputs.publish }}
     runs-on: ubuntu-latest
     permissions:
@@ -156,7 +201,7 @@ jobs:
     - name: create release
       env:
         GH_TOKEN: ${{ github.token }}
-        TAG: ${{ needs.build.outputs.tag }}
+        TAG: ${{ needs.prepare.outputs.tag }}
       run: |
         {
           echo "LGPL libmpv build (-Dgpl=false), ffmpeg without --enable-gpl / --enable-nonfree / --enable-version3."
@@ -164,12 +209,25 @@ jobs:
           echo '```'
           cat dist/*.sha256
           echo '```'
-          echo
-          echo '<details><summary>meson setup</summary>'
-          echo
-          echo '```'
-          cat dist/meson-setup.log
-          echo '```'
-          echo '</details>'
+          for info in dist/build-info-*.json; do
+            arch=$(basename "$info" .json); arch=${arch#build-info-}
+            echo
+            echo "<details><summary>ffmpeg configure ($arch)</summary>"
+            echo
+            echo '```'
+            jq -r .ffmpegConfigure "$info"
+            echo '```'
+            echo '</details>'
+          done
+          for log in dist/meson-setup-*.log; do
+            arch=$(basename "$log" .log); arch=${arch#meson-setup-}
+            echo
+            echo "<details><summary>meson setup ($arch)</summary>"
+            echo
+            echo '```'
+            cat "$log"
+            echo '```'
+            echo '</details>'
+          done
         } > notes.md
         gh release create "$TAG" dist/*.zip dist/*.sha256 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "libmpv LGPL $TAG" --notes-file notes.md
