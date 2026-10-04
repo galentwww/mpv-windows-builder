@@ -23,4 +23,9 @@ if(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm64")
     if(PORT MATCHES "^(libwebp)$")
         list(APPEND VCPKG_CMAKE_CONFIGURE_OPTIONS "-DWEBP_ENABLE_SIMD=OFF")
     endif()
+    # opus only presumes NEON when CMAKE_SYSTEM_PROCESSOR matches "aarch64" (ours is "ARM64") and otherwise
+    # falls back to MSVC-style runtime detection via __emit, which clang-cl lacks. ARMv8 always has NEON.
+    if(PORT MATCHES "^(opus)$")
+        list(APPEND VCPKG_CMAKE_CONFIGURE_OPTIONS "-DOPUS_MAY_HAVE_NEON=OFF" "-DOPUS_PRESUME_NEON=ON")
+    endif()
 endif()
