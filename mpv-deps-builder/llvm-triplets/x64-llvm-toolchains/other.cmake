@@ -23,9 +23,11 @@ if(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm64")
     if(PORT MATCHES "^(libwebp)$")
         list(APPEND VCPKG_CMAKE_CONFIGURE_OPTIONS "-DWEBP_ENABLE_SIMD=OFF")
     endif()
-    # opus only presumes NEON when CMAKE_SYSTEM_PROCESSOR matches "aarch64" (ours is "ARM64") and otherwise
-    # falls back to MSVC-style runtime detection via __emit, which clang-cl lacks. ARMv8 always has NEON.
+    # opus' ARM runtime CPU detection (celt/arm/armcpu.c) takes the _MSC_VER branch under clang-cl and calls
+    # the MSVC-only __emit intrinsic; its CMake cannot presume NEON without also compiling that file, and its
+    # headers assume PRESUME implies MAY_HAVE. Same choice as vcpkg's own arm64 MinGW path: plain C opus.
+    # Only affects Opus audio decoding cost, not video.
     if(PORT MATCHES "^(opus)$")
-        list(APPEND VCPKG_CMAKE_CONFIGURE_OPTIONS "-DOPUS_MAY_HAVE_NEON=OFF" "-DOPUS_PRESUME_NEON=ON")
+        list(APPEND VCPKG_CMAKE_CONFIGURE_OPTIONS "-DOPUS_DISABLE_INTRINSICS=ON")
     endif()
 endif()
